@@ -9,13 +9,39 @@ Read in this data.
 ```{r message = FALSE}
 pacman::p_load(tidyverse)
 
-test <- read_csv("Stocks/a.us.txt")
-
 stocks_csv <- paste0("Stocks/", list.files("Stocks/", pattern = "*.txt"))
-stocks <- lapply(stocks_csv, read_csv)
+stocks <- lapply(stocks_csv, read_csv, col_types = cols(Date = col_date(format = ""),
+                                                     Open = col_double(),
+                                                     High = col_double(),
+                                                     Low = col_double(),
+                                                     Close = col_double(),
+                                                     Volume = col_double(), # Read in as double because of some large values going int overflow
+                                                     OpenInt = col_integer()))
+stocks.init <- stocks
 
 ETF_csv <- paste0("ETFs/", list.files("ETFs/", pattern = "*.txt"))
 ETF <- lapply(ETF_csv, read_csv)
+ETF.init <- ETF
+
+NYSE_hist_returns <- data.frame(Year = seq(2000, 2016), ROR = c(
+  1.0,
+ -10.2,
+ -19.8,
+  29.3,
+  12.2,
+  7.0,
+  17.9,
+  6.6,
+ -40.9,
+  24.8,
+  10.8,
+ -6.1,
+  12.9,
+  23.2,
+  4.2,
+ -6.4,
+  9.0
+))
 ```
 There is some cleaning that has to take place prior to this step if using this approach. In the Stocks folder, a handful of files have no data entry. These files can be deleted manually or dealt with through some cumbersome if statement filtering. I went with the former. The collection of ETFs does not have any empty files, though it has two files (tvix and uvxy) that are miscoded with an extra column. Again, workarounds could be had. I will proceed with just deleting these two files, however, and revisit this problem later. 
 
@@ -35,8 +61,8 @@ I encountered an obvious problem with this approach in an initial run through. T
 ```{r}
 # Years of interest: 2000-2016
 # Example case for year 2000
-start.Date <- as.POSIXct("2000-01-08")
-end.Date <- as.POSIXct("2000-12-24")
+start.Date <- as.POSIXct("2008-01-08")
+end.Date <- as.POSIXct("2008-12-24")
 
 testing <- stocks
 filterFunction <- function(aList, first, last){
@@ -51,8 +77,8 @@ myTest <- lapply(testing, filterFunction, start.Date, end.Date)
 cleanedList <- Filter(function(x) {length(x) >= 2}, myTest) # Keeps only the stocks that were available year round for this given start/end
 
 # Now just keep the entries from the year 2000
-jan1 <- as.POSIXct("2000-01-01")
-dec31 <- as.POSIXct("2000-12-31")
+jan1 <- as.POSIXct("2008-01-01")
+dec31 <- as.POSIXct("2008-12-31")
 cleaned2000 <- lapply(cleanedList, function(x){filter(x, x$Date >= jan1 & x$Date <= dec31)})
 
 stocks <- cleaned2000
@@ -70,12 +96,11 @@ port_comp <- port_comp_raw / sum(port_comp_raw)
 
 start_value <- 100000
 start_dist <- start_value * port_comp 
-start_open <- sapply(list(sapply(stock_sim, '[[', c(2))), '[[', c(2)) # Broken atm
+start_open <- sapply(sapply(stock_sim, '[[', "Open", simplify = FALSE), '[', c(1))
 start_shares <- start_dist / start_open
 
-len_of_year <- dim(stock_sim[[1]])[1]
 flipped_list <- lapply(stock_sim, function(x) {x %>% arrange(desc(Date))}) # One stock didnt have same length, flip list and take first element
-end_close <- sapply(sapply(flipped_list, '[[', c(5)), '[[', c(1))
+end_close <- sapply(sapply(flipped_list, '[[', "Close", simplify = FALSE), '[', c(1))
 end_sale <- start_shares * end_close
 end_dist <- end_sale / sum(end_sale)
 end_value <- sum(end_sale)
@@ -86,10 +111,10 @@ ROR <- (end_value / start_value  - 1) * 100
 Now to build the above into a simulation style approach. Showing one instance to have a return of 20% would be a bit of a bogus claim. As with most statistics, the interesting part of this experiment rests in understanding the variation we can expect from iteration to iteration. The following simulation will hopefully explore this in the scope of the year 2000.
 
 ```{r}
-start.Date <- as.POSIXct("2000-01-08")
-end.Date <- as.POSIXct("2000-12-24")
+start.Date <- as.POSIXct("2009-01-08")
+end.Date <- as.POSIXct("2009-12-24")
 
-testing <- stocks
+testing <- stocks.init
 filterFunction <- function(aList, first, last){
   if(min(aList$Date) < first & max(aList$Date) > last ){
     return(aList)
@@ -102,16 +127,17 @@ myTest <- lapply(testing, filterFunction, start.Date, end.Date)
 cleanedList <- Filter(function(x) {length(x) >= 2}, myTest) # Keeps only the stocks that were available year round for this given start/end
 
 # Now just keep the entries from the year 2000
-jan1 <- as.POSIXct("2000-01-01")
-dec31 <- as.POSIXct("2000-12-31")
+jan1 <- as.POSIXct("2009-01-01")
+dec31 <- as.POSIXct("2009-12-31")
 cleaned2k <- lapply(cleanedList, function(x){filter(x, x$Date >= jan1 & x$Date <= dec31)})
 
-#sim_port_return <- function(cleaned2000){
-  cleaned2000 <- cleaned2k
+sim_port_return <- function(cleaned2000){
+  
   stocks <- cleaned2000
   n_stocks <- length(stocks)
   weights <-  exp(-1 * seq(1, n_stocks)) / sum(exp(-1 * seq(1, n_stocks))) # I can explore other transformations as well
   n_samp <- sample(seq(1, n_stocks), size = 1, prob = weights) # Chooses portfolio size
+  globe.test <<- n_samp
   
   # Now to choose the stocks
   selected_stocks <- sample(seq(1, n_stocks), size = n_samp)
@@ -123,11 +149,24 @@ cleaned2k <- lapply(cleanedList, function(x){filter(x, x$Date >= jan1 & x$Date <
   
   start_value <- 100000
   start_dist <- start_value * port_comp 
-start_open <- sapply(sapply(stock_sim, '[[', c(2)), '[[', c(1))
+  temp <- sapply(sapply(stock_sim, '[[', "Open", simplify = FALSE), '[', c(1))
+  
+  # If section is to deal with random NA's, uncommon so I can probably random them out for now. Will fix thoroughly later
+  if(!is.na(sum(temp))){
+    start_open <- temp
+  } 
+  else{
+    # Re-randomize
+    selected_stocks <- sample(seq(1, n_stocks), size = n_samp)
+    stock_sim <- stocks[selected_stocks]
+    start_open <- sapply(sapply(stock_sim, '[[', "Open", simplify = FALSE), '[', c(1))
+  }
+  
+  globe.start <<- start_open
   start_shares <- start_dist / start_open
   
   flipped_list <- lapply(stock_sim, function(x) {x %>% arrange(desc(Date))}) # One stock didnt have same length, flip list and take first element
-  end_close <- sapply(sapply(flipped_list, '[[', c(5)), '[[', c(1))
+  end_close <- sapply(sapply(flipped_list, '[[', "Close", simplify = FALSE), '[', c(1))
   end_sale <- start_shares * end_close
   end_dist <- end_sale / sum(end_sale)
   end_value <- sum(end_sale)
@@ -135,7 +174,7 @@ start_open <- sapply(sapply(stock_sim, '[[', c(2)), '[[', c(1))
   ROR <- (end_value / start_value  - 1) * 100
   return(ROR)
 
-#}
+}
 
 # Simulation
 nSim <- 10000
@@ -145,8 +184,69 @@ for(i in 1:nSim){
   return_in_2000[i] <- sim_port_return(cleaned2k)
 }
 
-return_in_2000 %>% data.frame() %>% ggplot(aes(x = .)) + geom_histogram()
+# Struggling to get the desired legend to show
+return_in_2000 %>% data.frame() %>% ggplot(aes(x = .)) + geom_histogram(fill = "ghostwhite", col = "black") + geom_vline(xintercept = mean(return_in_2000), col = "red", size = 1.5, aes(colour = "Mean Random"), show.legend=TRUE) +
+  geom_vline(xintercept = median(return_in_2000), col = "blue", size = 1.5, aes(colour = "Median Random"), show.legend=TRUE) +
+  geom_vline(xintercept = NYSE_hist_returns[NYSE_hist_returns$Year == 2000, "ROR"], col = "green", size = 1.5, aes(colour = "NYSE"), show.legend=TRUE) + 
+  ggtitle("Comparison of Random Portfolio returns against NYSE return") +
+  xlab("Rate of Return") + ylab("Number of Portfolios") +
+  scale_colour_manual("",
+                      values = c("Mean Random" = "red", "Median Random" ="blue", "NYSE" ="green")) +
+  theme_light()
+
+sum(return_in_2000 > 1) / length(return_in_2000)
 ```
+
+Interesting to see the performance differences between the random portfolios and the NYSE. In 2000, the NYSE ROR was 1%. The mean for the random portfolios was `r mean(return_in_2000)` and the median was `r median(return_in_2000``. For a slightly more interesting stat, `r sum(return_in_2000 > 1) / length(return_in_2000) * 100` would have outperformed the NYSE. This is a great motivating point for whether this is a phenomena bound to a single year or if it is extendable to other years. Is randomness the new hedge fund?
+
+```{r}
+# Extending to all the years in 2000-2016
+library(lubridate)
+start.Date.init <- as.POSIXct("2000-01-08")
+end.Date.init <- as.POSIXct("2000-12-24")
+jan1.init <- as.POSIXct("2000-01-01")
+dec31.init <- as.POSIXct("2000-12-31")
+
+nSim <- 5000
+ROR.df <- matrix(nrow = nSim, ncol = 17) # year 2000 -> 2016 is 17 years
+
+filterFunction <- function(aList, first, last){
+  if(min(aList$Date) < first & max(aList$Date) > last ){
+    return(aList)
+  }
+  else{
+    return("NotTraded")
+  }
+}
+
+for( i in 0:16){
+  # Update the year of interest
+  globe.i <<- i
+  start.Date <- start.Date.init %m+% years(i)
+  end.Date <- end.Date.init %m+% years(i)
+  
+  testing <- stocks.init
+  myTest <- lapply(testing, filterFunction, start.Date, end.Date)
+  cleanedList <- Filter(function(x) {length(x) >= 2}, myTest) # Keeps only the stocks that were available year round for this given start/end
+
+  # Now just keep the entries from the year 2000
+  jan1 <- jan1.init %m+% years(i)
+  dec31 <- dec31.init %m+% years(i)
+  cleanedYear <- lapply(cleanedList, function(x){filter(x, x$Date >= jan1 & x$Date <= dec31)})
+
+
+# Simulation
+
+ 
+
+  for(j in 1:nSim){
+    globe.j <<- j
+    ROR.df[j, i] <- sim_port_return(cleanedYear)
+  }
+
+}
+```
+
 
 
 Chris' ideas
