@@ -8,6 +8,7 @@ Read in this data.
 
 ```{r message = FALSE}
 pacman::p_load(tidyverse)
+set.seed(1)
 
 stocks_csv <- paste0("Stocks/", list.files("Stocks/", pattern = "*.txt"))
 stocks <- lapply(stocks_csv, read_csv, col_types = cols(Date = col_date(format = ""),
@@ -245,6 +246,18 @@ for( i in 0:16){
   }
 
 }
+
+# Clean up the data frame
+library(reshape)
+names(ROR.df) <- as.character(seq(2000, 2016))
+temp <- ROR.df %>% as.data.frame() %>% mutate(sim_n = 1:5000) 
+names(temp) <- c(as.character(seq(2000, 2016)), "sim_n")
+more_clean <- temp %>% select(-"2016") %>% melt(id = "sim_n") 
+ROR.df.plot <- more_clean
+
+# Plotting the results
+ROR.df.plot %>% ggplot(aes(x = value)) + geom_histogram() + facet_wrap(~ variable) +
+  scale_x_continuous(limits = c(-100, 300)) + ggtitle("Random Portfolio returns by year")
 ```
 
 
