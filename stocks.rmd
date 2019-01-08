@@ -8,7 +8,7 @@ Read in this data.
 
 ```{r message = FALSE}
 pacman::p_load(tidyverse)
-set.seed(1)
+set.seed(1234)
 
 stocks_csv <- paste0("Stocks/", list.files("Stocks/", pattern = "*.txt"))
 stocks <- lapply(stocks_csv, read_csv, col_types = cols(Date = col_date(format = ""),
@@ -65,7 +65,7 @@ I encountered an obvious problem with this approach in an initial run through. T
 start.Date <- as.POSIXct("2008-01-08")
 end.Date <- as.POSIXct("2008-12-24")
 
-testing <- stocks
+testing <- stocks.init
 filterFunction <- function(aList, first, last){
   if(min(aList$Date) < first & max(aList$Date) > last ){
     return(aList)
@@ -112,8 +112,8 @@ ROR <- (end_value / start_value  - 1) * 100
 Now to build the above into a simulation style approach. Showing one instance to have a return of 20% would be a bit of a bogus claim. As with most statistics, the interesting part of this experiment rests in understanding the variation we can expect from iteration to iteration. The following simulation will hopefully explore this in the scope of the year 2000.
 
 ```{r}
-start.Date <- as.POSIXct("2009-01-08")
-end.Date <- as.POSIXct("2009-12-24")
+start.Date <- as.POSIXct("2000-01-08")
+end.Date <- as.POSIXct("2000-12-24")
 
 testing <- stocks.init
 filterFunction <- function(aList, first, last){
@@ -128,8 +128,8 @@ myTest <- lapply(testing, filterFunction, start.Date, end.Date)
 cleanedList <- Filter(function(x) {length(x) >= 2}, myTest) # Keeps only the stocks that were available year round for this given start/end
 
 # Now just keep the entries from the year 2000
-jan1 <- as.POSIXct("2009-01-01")
-dec31 <- as.POSIXct("2009-12-31")
+jan1 <- as.POSIXct("2000-01-01")
+dec31 <- as.POSIXct("2000-12-31")
 cleaned2k <- lapply(cleanedList, function(x){filter(x, x$Date >= jan1 & x$Date <= dec31)})
 
 sim_port_return <- function(cleaned2000){
@@ -239,24 +239,34 @@ for( i in 0:16){
 # Simulation
 
  
-
+  print(start.Date)
+  print(end.Date)
   for(j in 1:nSim){
     globe.j <<- j
-    ROR.df[j, i] <- sim_port_return(cleanedYear)
+    ROR.df[j, i + 1] <- sim_port_return(cleanedYear)
   }
 
 }
+# Looks like everything lines up now, fixed the indexing error
+# rbind(apply(ROR.df, MARGIN = 2, FUN = mean), NYSE_hist_returns$ROR)
 
 # Clean up the data frame
 library(reshape)
 names(ROR.df) <- as.character(seq(2000, 2016))
 temp <- ROR.df %>% as.data.frame() %>% mutate(sim_n = 1:5000) 
 names(temp) <- c(as.character(seq(2000, 2016)), "sim_n")
-more_clean <- temp %>% select(-"2016") %>% melt(id = "sim_n") 
+more_clean <- temp %>% melt(id = "sim_n") 
 ROR.df.plot <- more_clean
 
+avg_and_med_ROR <- ROR.df.plot %>% group_by(variable) %>% summarise(average = mean(value),
+                                                                    med = median(value))
+
+NYSE_and_port_ROR <- data.frame(cbind( avg_and_med_ROR, NYSE_hist_returns$ROR))
 # Plotting the results
-ROR.df.plot %>% ggplot(aes(x = value)) + geom_histogram() + facet_wrap(~ variable) +
+ROR.df.plot %>% ggplot(aes(x = value)) + geom_histogram() + geom_vline(data = NYSE_and_port_ROR, aes(xintercept = average), colour = "Red")+
+  geom_vline(data = NYSE_and_port_ROR, aes(xintercept = med), colour = "Blue")+
+  geom_vline(data = NYSE_and_port_ROR, aes(xintercept = NYSE_hist_returns.ROR), colour = "Green")+
+  facet_wrap(~ variable) +
   scale_x_continuous(limits = c(-100, 300)) + ggtitle("Random Portfolio returns by year")
 ```
 
