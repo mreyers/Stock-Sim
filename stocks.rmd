@@ -1,3 +1,8 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
 This is the beginning of a hopefully interesting stock simulation. I came across the thought recently of how a randomly divised portfolio would perform over different time periods. When I say randomly divised, I am talking about every aspect of the portfolio with only minor modifications. How many stocks should be owned? What stocks should be purchased? How much of each stock should be in the portfolio? There may be more random elements explored later, though for now I will focus on these.
 
 Some basic assumptions and set up I will be doing for this project. First, stocks will be purchased at open on the first trading day of the year and sold at close on the last trading day of the year. There will be no opportunity to sell during the year for this simulation though I may explore the maximum possible gain/loss for each portfolio and the actual outcome. Secondly, I allow for the purchasing of fractions of shares. In real investing this would be done by purchasing either one more or one fewer shares. I am only approximating here so this step simplifies the rounding.
@@ -198,7 +203,7 @@ return_in_2000 %>% data.frame() %>% ggplot(aes(x = .)) + geom_histogram(fill = "
 sum(return_in_2000 > 1) / length(return_in_2000)
 ```
 
-Interesting to see the performance differences between the random portfolios and the NYSE. In 2000, the NYSE ROR was 1%. The mean for the random portfolios was `r mean(return_in_2000)` and the median was `r median(return_in_2000``. For a slightly more interesting stat, `r sum(return_in_2000 > 1) / length(return_in_2000) * 100` would have outperformed the NYSE. This is a great motivating point for whether this is a phenomena bound to a single year or if it is extendable to other years. Is randomness the new hedge fund?
+Interesting to see the performance differences between the random portfolios and the NYSE. In 2000, the NYSE ROR was 1%. The mean for the random portfolios was `r mean(return_in_2000)` and the median was `r median(return_in_2000`. For a slightly more interesting stat, `r sum(return_in_2000 > 1) / length(return_in_2000) * 100` would have outperformed the NYSE. This is a great motivating point for whether this is a phenomena bound to a single year or if it is extendable to other years. Is randomness the new hedge fund?
 
 ```{r}
 # Extending to all the years in 2000-2016
@@ -263,11 +268,42 @@ avg_and_med_ROR <- ROR.df.plot %>% group_by(variable) %>% summarise(average = me
 
 NYSE_and_port_ROR <- data.frame(cbind( avg_and_med_ROR, NYSE_hist_returns$ROR))
 # Plotting the results
-ROR.df.plot %>% ggplot(aes(x = value)) + geom_histogram() + geom_vline(data = NYSE_and_port_ROR, aes(xintercept = average), colour = "Red")+
-  geom_vline(data = NYSE_and_port_ROR, aes(xintercept = med), colour = "Blue")+
-  geom_vline(data = NYSE_and_port_ROR, aes(xintercept = NYSE_hist_returns.ROR), colour = "Green")+
-  facet_wrap(~ variable) +
-  scale_x_continuous(limits = c(-100, 300)) + ggtitle("Random Portfolio returns by year")
+
+  
+  ROR.df.plot %>% ggplot(aes(x = value)) + geom_histogram() + geom_vline(data = NYSE_and_port_ROR, aes(xintercept = average), colour = "Red")+
+    geom_vline(data = NYSE_and_port_ROR, aes(xintercept = med), colour = "Blue")+
+    geom_vline(data = NYSE_and_port_ROR, aes(xintercept = NYSE_hist_returns.ROR), colour = "Green")+
+    facet_wrap(~ variable, nrow = 5) +
+    scale_x_continuous(limits = c(-100, 300)) + ggtitle("Random Portfolio returns by year") +
+    xlab("Rate of Return") + ylab("Number of Portfolios")
+  
+# Compare the ROR by year in its own separate plot for clarity
+NYSE_and_port_ROR %>% ggplot(aes(x = variable)) +
+  geom_point(aes( y = average), colour = "Red") +
+  geom_point(aes( y = med), colour = "Blue") +
+  geom_point(aes( y = NYSE_hist_returns.ROR), colour = "Green") +
+  geom_point(aes(y = average - NYSE_hist_returns.ROR), colour = "Black") + 
+  geom_line(aes( y = average - NYSE_hist_returns.ROR, group = 1), colour = "Black") +
+  ggtitle("Comparison of ROR across portfolio types") +
+  xlab("Year") + ylab("Rate of Return")
+```
+From the plots above, the portfolio distribution seems to be favourable. The Comparison of ROR across portfolio types is the most indicative, showing the average portfolio ROR outperformed the NYSE ROR in all years except 2007. Not bad for choosing at random. For further consideration, it may be worth noting what proportion of random portfolios outperformed the corresponding NYSE return for that year. 
+
+```{r}
+# Proportion of outperforming portfolios
+performance <- rep(0, length = 17)
+for(i in 1:length(performance)){
+  year <- 2000:2016
+  NYSE_Res <- NYSE_hist_returns$ROR[NYSE_hist_returns$Year == year[i]]
+  performance[i] <- ROR.df.plot %>% filter(variable == year[i]) %>% select(value)  %>% summarise(prop = mean(. > NYSE_Res)) %>% select(prop)
+}
+library(data.table)
+vec_performance <- unlist(performance)
+
+data.frame(cbind(year, vec_performance)) %>% ggplot(aes(x = year, y = vec_performance)) + geom_point() +
+  ggtitle("Proportion of portfolios that outperformed NYSE") + xlab("Year") + ylab("Proportion of Portfolios") +
+  geom_abline(intercept = 0.5, slope = 0, col = "Red")
+
 ```
 
 
