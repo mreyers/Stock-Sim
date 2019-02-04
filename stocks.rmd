@@ -361,9 +361,9 @@ nSim <- 10000
 return_in_2000_star <- rep(0, n = nSim)
 
 # Skipped in future runs due to an obscene runtime, will instead limit at 30 stocks per portfolio
-# for(i in 1:nSim){
-#   return_in_2000_star[i] <- sim_port_return_unweighted(cleaned2k)
-# }
+for(i in 1:nSim){
+  return_in_2000_star[i] <- sim_port_return_unweighted(cleaned2k)
+}
 
 # Struggling to get the desired legend to show
 return_in_2000_star %>% data.frame() %>% ggplot(aes(x = .)) + geom_histogram(fill = "ghostwhite", col = "black") + geom_vline(xintercept = mean(return_in_2000), col = "red", size = 1.5, aes(colour = "Mean Random"), show.legend=TRUE) +
@@ -392,7 +392,22 @@ setwd("~/Github/Stock-Sim/Stock Industry")
 stocks_industry <- lapply(list.files(), read_csv)
 stocks_industry <- stocks_industry %>% rbindlist() %>% select(Symbol, Name, Sector, Industry) %>% arrange(Symbol)
 
-# Merge with original data set
+# Merge with original data set, requires some fixing as ticker name was the file, not a variable
+orig_stocks <- strsplit(list.files("~/Github/Stock-Sim/Stocks"), split = "\\.") %>% lapply(first) %>% lapply(toupper) %>% unlist() %>% data.frame() 
+
+kept_stocks <- orig_stocks %>% filter(. %in% stocks_industry$Symbol) %>% mutate(Symbol = as.character(.)) %>%
+  select(Symbol) %>% data.frame() %>% left_join(stocks_industry)
+
+# Now to load only these stocks
+targets <- kept_stocks$Symbol %>% tolower() %>% paste0(., ".us.txt")
+setwd("~/Github/Stock-Sim/Stocks")
+kept_stocks_data <- lapply(targets, read_csv, col_types = cols(Date = col_date(format = ""),
+                                                     Open = col_double(),
+                                                     High = col_double(),
+                                                     Low = col_double(),
+                                                     Close = col_double(),
+                                                     Volume = col_double(), # Read in as double because of some large values going int overflow
+                                                     OpenInt = col_integer()))
 ```
 
 
